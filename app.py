@@ -30,7 +30,7 @@ for cat in CATEGORIES:
     (STORAGE / cat).mkdir(parents=True, exist_ok=True)
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/home", response_class=HTMLResponse)
 async def homepage(request: Request):
     data = list_files()
     return templates.TemplateResponse(
