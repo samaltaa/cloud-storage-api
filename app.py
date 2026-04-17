@@ -148,6 +148,6 @@ def server_status():
     }
 
 
-@app.get("/")
+@app.get("/health")
 def root():
     return {"message": "Personal Cloud API is running", "docs": "/docs"}
