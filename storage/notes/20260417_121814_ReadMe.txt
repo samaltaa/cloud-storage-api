@@ -1,0 +1,86 @@
+this is the Bidens Bane V1 Full release all parts can break and should be treated as such, 
+that being said it wont explode unless you do some seriously stupid shit.
+
+Materials
+Ender3 or equivalent printer
+Roll of pla/pla+
+5/16 OD .215ID Seamless stainless steel tubing or the equivalent metal tubing 
+https://www.mcmaster.com/seamless-tubing/smooth-bore-seamless-stainless-steel-tubing/od~5-16/id~0-215/
+8x2" 8-32 machine screws 
+Metal Bushings (can use these or any of the printed bushings)
+Black-Anodized Aluminum, 1/4" OD, 3/4" Long, for Number 8 Size Screw
+https://www.mcmaster.com/93013A190/
+Black-Anodized Aluminum, 1/4" OD, 1/4" Long, for Number 8 Size Screw
+https://www.mcmaster.com/93013A424/
+Screwdriver
+Bandsaw/Handsaw (for metal tubing)
+file(recommended)
+hand drill (Strongly recommended)
+8-10 inch long phillips driver (Strongly recommended)
+chisels (recommended)
+
+Printed Materials
+Upper reciever
+Bushings (can use metal bushings)
+Handguard
+
+Print Settings
+1. place file in slicer with top of receiver down to print bed
+2. layer height .2mm
+3. infill 99%
+4. heat 210c (or your prefered print temp)
+5. walls 4-5 
+
+
+Build Steps 
+1.Clean off any support structure
+2.Test fit Charging Handle and check function.  Clean or scrape if necessary
+3.Test fit Bolt Carrier Group and check drag.  BCG should move freely
+4.Pre-thread all holes(get it a thread or 2 in, then run it all the way through with a hand drill)
+5.Drill out hole for Stainless Tube and insert(5/16 drill bit)  Tube should be flush or slightly inset from front of receiver.
+6.Test fit barrel in handguard.  Make sure mounting ring can fit flush in the recess
+7.Fit barrel in receiver.  Should require moderate force to mount.  Light force is ok.  Too heavy force may crack the print.  File/sand/dremmel if necessary
+8.Fit barrel nut/handguard over barrel to upper receiver.
+9.Standing the receiver up on it's end, put pressure down on the handguard and begin to drive the first screw.  (I like to start with the top 2, then do the middle 2, then the bottom 2)  DO NOT OVERTIGHTEN THE SCREWS.  Set your clutch on your drill so it slips before it overtightens.  Overtightening the screws will crack the print.
+10.Install the gas tube and gas block
+11.Install the charging handle and BCG
+12.Attatch to your lower
+13.Cycle the action manually (W/O ammo) to check function.  
+
+
+Troubleshooting
+1. My Charging Handle is hard to install
+	Use a punch to press the 'nubs' of the handle into the channel.  Make sure you are aligned with the pathway for the 'nubs'
+2. My charging handle is hard to draw or has excessive drag
+	Inspect channel and roof of receiver for support remains.  scrape or clean.  Also verify upper is not warped.  If warped, reprint w/ gluestick
+3. My BCG has excessive drag, or is hard to release from lockup.
+	Again check for any support residue or warping.  Apply a light coat of oil and work the action manually until function improves.
+4. My heat sink tube is tight.  Can I use moderate to heavy force to install?
+	Yes, however check the tube and inside of receiver for fillament residue scraped off during install
+5. My barrel is tight, and hard to install
+	You can sand/file/dremmel material away until fit improves.  Only remove a small amount at a time and retest fit. 
+6. My handguard will not mount flush to the receiver
+	Check the recess in the handguard where the barrel ring sits for support residue/trash.  Scrape or sand if necessary.
+	Check both faces for warping/squareness.  Sand or file if necessary
+	Inspect screw holes for excess material pushed out during the threading process.  Clean if necessary
+7. My print cracked.  Will I die if I use it?
+	No.  But be smart about what you put it through while you reprint.
+
+
+
+
+
+
+
+
+
+
+Special Thanks to: 
+UberClay: for much help with handguards and lots of fire testing
+Generalscotty-Alt: for helping to bring the original V2 into existance
+Dr.Death: for beta help and fire testing
+Gerald Fish: HandGuard Help
+
+
+And too;
+Jan Frouz for the angled grip file and xYeezySzn for his macdaddy fore grip files
