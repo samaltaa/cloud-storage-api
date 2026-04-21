@@ -58,8 +58,8 @@
                 <button 
                     hx-delete="/delete/{{ category }}/{{ file.name }}"
                     hx-confirm="Delete this file?"
-                    hx-target="closest(.masonry-item)"
-                    hx-swap="outerHTML"
+                    hx-target="closest .masonry-item"
+                    hx-swap="delete"
                     class="text-red-400 hover:text-red-500">Delete</button>
             </div>
         </div>
