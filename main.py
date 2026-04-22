@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, APIRouter
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,48 +31,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#config 
+# Config
 
-STORAGE    = Path("/home/chongzi/cloud/storage")
+STORAGE    = Path("C:/Users/Grace/cloud-storage-api/storage")
 CATEGORIES = ["images", "notes", "datasets", "general"]
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
 
-IMAGE_QUALITY  = 82        # WebP quality 0-100. 82 is visually lossless for most content.
-IMAGE_MAX_DIM  = 3840      # Cap longest side at 4K before storing.
+IMAGE_QUALITY  = 82
+IMAGE_MAX_DIM  = 3840
 THUMBNAIL_SIZE = (320, 320)
 
-VIDEO_CRF     = 28         # 18=near-lossless, 28=good balance, 51=worst.
-VIDEO_PRESET  = "fast"     # ultrafast→fast→medium→slow (speed vs compression tradeoff).
+VIDEO_CRF     = 28
+VIDEO_PRESET  = "fast"
 VIDEO_CODEC   = "libx264"
 AUDIO_CODEC   = "aac"
 AUDIO_BITRATE = "128k"
 
-# Ensure all category folders exist on startup.
 for _cat in CATEGORIES:
     (STORAGE / _cat).mkdir(parents=True, exist_ok=True)
 
-#encryption key 
+# Encryption — single Fernet instance shared across the whole app.
 
 _SECRET = os.getenv("CLOUD_SECRET_KEY")
 
 if not _SECRET:
-    raise RuntimeError(
-        "CLOUD_SECRET_KEY missing. Add it to .env"
-    )
+    raise RuntimeError("CLOUD_SECRET_KEY missing. Add it to .env")
 
-_key_bytes = hashlib.sha256(_SECRET.encode()).digest()
+_key_bytes  = hashlib.sha256(_SECRET.encode()).digest()
 _FERNET_KEY = base64.urlsafe_b64encode(_key_bytes)
+_fernet     = Fernet(_FERNET_KEY)
 
-_fernet = Fernet(_FERNET_KEY)
+
+def encrypt(data: bytes) -> bytes:
+    return _fernet.encrypt(data)
 
 
-# file services 
+def decrypt(data: bytes) -> bytes:
+    try:
+        return _fernet.decrypt(data)
+    except Exception:
+        raise ValueError("Decryption failed — wrong key or corrupted file.")
+
+
+
+# File services  (all writes go through encrypt; all reads go through decrypt)
 
 def file_svc_list_all() -> dict:
     result = {}
-    total = 0
+    total  = 0
     for cat in CATEGORIES:
         files = sorted(os.listdir(STORAGE / cat))
         result[cat] = files
@@ -83,36 +90,46 @@ def file_svc_list_all() -> dict:
 
 def file_svc_list_category(category: str) -> dict:
     cat_path = STORAGE / category
-    files = []
+    files    = []
     for f in sorted(os.listdir(cat_path), reverse=True):
         filepath = cat_path / f
-        stat = filepath.stat()
+        stat     = filepath.stat()
         files.append({
-            "name": f,
+            "name":      f,
             "size_bytes": stat.st_size,
-            "size_mb": round(stat.st_size / 1024 / 1024, 2),
-            "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "size_mb":    round(stat.st_size / 1024 / 1024, 2),
+            "modified":   datetime.fromtimestamp(stat.st_mtime).isoformat(),
         })
     return {"category": category, "count": len(files), "files": files}
 
 
 def file_svc_upload(category: str, filename: str, data: bytes) -> dict:
-
     timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_name  = filename.replace(" ", "_")
     final_name = f"{timestamp}_{safe_name}"
     filepath   = STORAGE / category / final_name
-    filepath.write_bytes(data)
+
+    encrypted = encrypt(data)
+    filepath.write_bytes(encrypted)
+
     return {
-        "filename": final_name,
-        "category": category,
-        "size_bytes": len(data),
-        "size_mb": round(len(data) / 1024 / 1024, 2),
+        "filename":         final_name,
+        "category":         category,
+        "size_bytes":       len(data),
+        "size_mb":          round(len(data) / 1024 / 1024, 2),
+        "encrypted":        True,
+        "stored_size_bytes": len(encrypted),
     }
 
 
-def file_svc_get_path(category: str, filename: str) -> Path:
+def file_svc_read(category: str, filename: str) -> bytes:
+    filepath = STORAGE / category / filename
+    if not filepath.exists():
+        raise FileNotFoundError(filename)
+    return decrypt(filepath.read_bytes())
 
+
+def file_svc_get_path(category: str, filename: str) -> Path:
     filepath = STORAGE / category / filename
     if not filepath.exists():
         raise FileNotFoundError(filename)
@@ -127,26 +144,22 @@ def file_svc_delete(category: str, filename: str) -> dict:
     return {"deleted": filename, "category": category}
 
 
-#image services
+# Image services
 
 def image_svc_compress(data: bytes, original_filename: str) -> tuple[bytes, str]:
-    
     img = Image.open(io.BytesIO(data))
 
-    # WebP handles RGBA and RGB natively; normalise everything else.
     if img.mode in ("P", "LA"):
         img = img.convert("RGBA")
     elif img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGB")
 
-    # Cap resolution to 4K.
     w, h = img.size
     if max(w, h) > IMAGE_MAX_DIM:
         scale = IMAGE_MAX_DIM / max(w, h)
-        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        img   = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
 
     buf = io.BytesIO()
-    # method=6 is the slowest but best WebP compression method. Acceptable for a homeserver.
     img.save(buf, format="WEBP", quality=IMAGE_QUALITY, method=6)
     buf.seek(0)
 
@@ -155,7 +168,6 @@ def image_svc_compress(data: bytes, original_filename: str) -> tuple[bytes, str]
 
 
 def image_svc_decompress(data: bytes, target_format: str = "PNG") -> tuple[bytes, str]:
-    
     img = Image.open(io.BytesIO(data))
     buf = io.BytesIO()
     fmt = target_format.upper()
@@ -163,7 +175,7 @@ def image_svc_decompress(data: bytes, target_format: str = "PNG") -> tuple[bytes
     if fmt == "JPEG":
         img.convert("RGB").save(buf, format="JPEG", quality=95)
         media_type = "image/jpeg"
-    else:  # default PNG
+    else:
         img.save(buf, format="PNG", optimize=True)
         media_type = "image/png"
 
@@ -171,23 +183,23 @@ def image_svc_decompress(data: bytes, target_format: str = "PNG") -> tuple[bytes
     return buf.read(), media_type
 
 
-def image_svc_metadata(filepath: Path) -> dict:
-    img = Image.open(filepath)
+def image_svc_metadata_from_bytes(data: bytes, filepath: Path) -> dict:
+    img  = Image.open(io.BytesIO(data))
     stat = filepath.stat()
     return {
         "filename": filepath.name,
-        "format": img.format,
-        "mode": img.mode,
-        "width": img.width,
-        "height": img.height,
-        "size_bytes": stat.st_size,
-        "size_mb": round(stat.st_size / 1024 / 1024, 2),
-        "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        "format":   img.format,
+        "mode":     img.mode,
+        "width":    img.width,
+        "height":   img.height,
+        "stored_size_bytes": stat.st_size,
+        "stored_size_mb":    round(stat.st_size / 1024 / 1024, 2),
+        "modified":          datetime.fromtimestamp(stat.st_mtime).isoformat(),
     }
 
 
-def image_svc_thumbnail(filepath: Path) -> bytes:
-    img = Image.open(filepath)
+def image_svc_thumbnail(data: bytes) -> bytes:
+    img = Image.open(io.BytesIO(data))
     img.thumbnail(THUMBNAIL_SIZE, Image.LANCZOS)
     buf = io.BytesIO()
     img.save(buf, format="WEBP", quality=70)
@@ -195,74 +207,66 @@ def image_svc_thumbnail(filepath: Path) -> bytes:
     return buf.read()
 
 
-#note services 
+# Note services  (notes use the shared encrypt/decrypt — no double-wrap)
 
 def notes_svc_encrypt(data: bytes) -> bytes:
-    return _fernet.encrypt(data)
+    return encrypt(data)
 
 
 def notes_svc_decrypt(data: bytes) -> bytes:
-    
-    try:
-        return _fernet.decrypt(data)
-    except Exception:
-        raise ValueError("Decryption failed — wrong key or corrupted file.")
+    return decrypt(data)
 
 
 def notes_svc_preview(filepath: Path, chars: int = 500) -> str:
-    """Decrypt and return only the first `chars` characters. Memory-safe."""
     raw       = filepath.read_bytes()
     plaintext = notes_svc_decrypt(raw)
     text      = plaintext.decode("utf-8", errors="replace")
     return text[:chars] + ("…" if len(text) > chars else "")
 
 
-#dataset services 
 
-def dataset_svc_preview(filepath: Path, rows: int = 10) -> dict:
-    
+# Dataset services
+
+
+def dataset_svc_preview(data: bytes, filename: str, rows: int = 10) -> dict:
     preview_rows: list[dict] = []
-    headers: list[str] = []
+    headers: list[str]       = []
     total = 0
 
-    with open(filepath, newline="", encoding="utf-8", errors="replace") as f:
-        reader = csv.DictReader(f)
-        headers = list(reader.fieldnames or [])
-        for row in reader:
-            total += 1
-            if len(preview_rows) < rows:
-                preview_rows.append(dict(row))
+    text_io = io.StringIO(data.decode("utf-8", errors="replace"))
+    reader  = csv.DictReader(text_io)
+    headers = list(reader.fieldnames or [])
+    for row in reader:
+        total += 1
+        if len(preview_rows) < rows:
+            preview_rows.append(dict(row))
 
-    stat = filepath.stat()
     return {
-        "filename": filepath.name,
-        "headers": headers,
+        "filename":     filename,
+        "headers":      headers,
         "column_count": len(headers),
-        "total_rows": total,
+        "total_rows":   total,
         "preview_rows": len(preview_rows),
-        "rows": preview_rows,
-        "size_bytes": stat.st_size,
-        "size_mb": round(stat.st_size / 1024 / 1024, 2),
+        "rows":         preview_rows,
     }
 
 
-def _dataset_stream_chunks(filepath: Path, chunk_size: int = 65536):
-    """Generator: yield file in 64 KB chunks for StreamingResponse."""
-    with open(filepath, "rb") as f:
-        while True:
-            chunk = f.read(chunk_size)
-            if not chunk:
-                break
-            yield chunk
+def _stream_bytes(data: bytes, chunk_size: int = 65536):
+    buf = io.BytesIO(data)
+    while True:
+        chunk = buf.read(chunk_size)
+        if not chunk:
+            break
+        yield chunk
 
 
-#video services
+# Video / general services
+
 def general_svc_is_video(filename: str) -> bool:
     return Path(filename).suffix.lower() in VIDEO_EXTENSIONS
 
 
 def general_svc_compress_video(input_path: Path, output_path: Path) -> dict:
-    
     cmd = [
         "ffmpeg", "-y",
         "-i",        str(input_path),
@@ -271,22 +275,18 @@ def general_svc_compress_video(input_path: Path, output_path: Path) -> dict:
         "-preset",   VIDEO_PRESET,
         "-c:a",      AUDIO_CODEC,
         "-b:a",      AUDIO_BITRATE,
-        "-movflags", "+faststart",   # metadata at front = instant web playback
+        "-movflags", "+faststart",
         str(output_path),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        # Surface the last 600 chars of ffmpeg stderr — usually enough to diagnose.
         raise RuntimeError(f"ffmpeg failed:\n{result.stderr[-600:]}")
 
     original_size   = input_path.stat().st_size
     compressed_size = output_path.stat().st_size
-    saved_pct = (
-        round((1 - compressed_size / original_size) * 100, 1)
-        if original_size else 0
-    )
+    saved_pct       = round((1 - compressed_size / original_size) * 100, 1) if original_size else 0
     return {
-        "original_size_mb":   round(original_size / 1024 / 1024, 2),
+        "original_size_mb":   round(original_size   / 1024 / 1024, 2),
         "compressed_size_mb": round(compressed_size / 1024 / 1024, 2),
         "saved_percent":      saved_pct,
         "codec":              f"{VIDEO_CODEC} / {AUDIO_CODEC}",
@@ -294,13 +294,13 @@ def general_svc_compress_video(input_path: Path, output_path: Path) -> dict:
     }
 
 
-#status serviuce 
+# Status service
 
 def status_svc_disk_usage() -> dict:
     total, used, free = shutil.disk_usage(STORAGE)
-    per_category = {}
+    per_category      = {}
     for cat in CATEGORIES:
-        cat_path = STORAGE / cat
+        cat_path  = STORAGE / cat
         cat_files = [f for f in cat_path.iterdir() if f.is_file()]
         cat_size  = sum(f.stat().st_size for f in cat_files)
         per_category[cat] = {
@@ -309,19 +309,22 @@ def status_svc_disk_usage() -> dict:
             "size_mb":    round(cat_size / 1024 / 1024, 2),
         }
     return {
-        "disk_total_gb":      round(total / 1024 ** 3, 2),
-        "disk_used_gb":       round(used  / 1024 ** 3, 2),
-        "disk_free_gb":       round(free  / 1024 ** 3, 2),
-        "disk_used_percent":  round(used  / total * 100, 1),
+        "disk_total_gb":       round(total / 1024 ** 3, 2),
+        "disk_used_gb":        round(used  / 1024 ** 3, 2),
+        "disk_free_gb":        round(free  / 1024 ** 3, 2),
+        "disk_used_percent":   round(used  / total * 100, 1),
         "storage_by_category": per_category,
     }
 
 
-#old routes
+# Helper
+
 def _require_category(category: str):
     if category not in CATEGORIES:
         raise HTTPException(status_code=404, detail=f"Unknown category: '{category}'")
 
+
+# Legacy routes  (kept for backward-compat; encryption applied transparently)
 
 @app.get("/", response_class=HTMLResponse)
 async def homepage(request: Request):
@@ -344,6 +347,7 @@ def list_category_files(category: str):
 async def upload_file(category: str, file: UploadFile = File(...)):
     _require_category(category)
     data = await file.read()
+    # data → encrypt → disk  (no compression on the legacy route)
     return file_svc_upload(category, file.filename, data)
 
 
@@ -351,10 +355,12 @@ async def upload_file(category: str, file: UploadFile = File(...)):
 def download_file(category: str, filename: str):
     _require_category(category)
     try:
-        path = file_svc_get_path(category, filename)
+        data = file_svc_read(category, filename)   # disk → decrypt → bytes
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(path)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return Response(content=data, media_type="application/octet-stream")
 
 
 @app.delete("/delete/{category}/{filename}")
@@ -371,70 +377,79 @@ def status():
     return status_svc_disk_usage()
 
 
-#v1 endpoints
+
+# API v1
+
 v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 
 
-#v1 images endpoints
-@v1.post("/images/upload", summary="Upload & compress image to WebP")
+#Images 
+@v1.post("/images/upload", summary="Upload image → WebP compress → encrypt → store")
 async def v1_upload_image(file: UploadFile = File(...)):
-    
     ext = Path(file.filename).suffix.lower()
     if ext not in IMAGE_EXTENSIONS:
         raise HTTPException(
             status_code=415,
             detail=f"Unsupported image type '{ext}'. Accepted: {sorted(IMAGE_EXTENSIONS)}",
         )
-    data = await file.read()
+    raw = await file.read()
+
+    # 1. Compress to WebP
     try:
-        compressed, new_name = image_svc_compress(data, file.filename)
+        compressed, new_name = image_svc_compress(raw, file.filename)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Image processing failed: {e}")
 
+    # 2. Encrypt (inside file_svc_upload) -> write to disk
     result = file_svc_upload("images", new_name, compressed)
-    result["original_size_kb"]   = round(len(data) / 1024, 1)
+    result["original_size_kb"]   = round(len(raw)        / 1024, 1)
     result["compressed_size_kb"] = round(len(compressed) / 1024, 1)
-    result["saved_percent"]      = round((1 - len(compressed) / len(data)) * 100, 1)
+    result["saved_percent"]      = round((1 - len(compressed) / len(raw)) * 100, 1)
     result["stored_format"]      = "webp"
     return result
 
 
-@v1.get("/images/{filename}", summary="Fetch & decode image (WebP → PNG/JPEG)")
+@v1.get("/images/{filename}", summary="Decrypt -> decode WebP -> return PNG/JPEG")
 def v1_get_image(filename: str, format: str = "png"):
-    
     try:
-        path = file_svc_get_path("images", filename)
+        # disk → decrypt → WebP bytes
+        data = file_svc_read("images", filename)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Image not found")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
-    raw = path.read_bytes()
     try:
-        decoded, media_type = image_svc_decompress(raw, target_format=format.upper())
+        decoded, media_type = image_svc_decompress(data, target_format=format.upper())
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Decode failed: {e}")
 
     return Response(content=decoded, media_type=media_type)
 
 
-@v1.get("/images/{filename}/thumbnail", summary="320×320 WebP thumbnail")
+@v1.get("/images/{filename}/thumbnail", summary="Decrypt → 320×320 WebP thumbnail")
 def v1_image_thumbnail(filename: str):
-
     try:
-        path = file_svc_get_path("images", filename)
+        data = file_svc_read("images", filename)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Image not found")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
-    thumb = image_svc_thumbnail(path)
-    return Response(content=thumb, media_type="image/webp")
+    return Response(content=image_svc_thumbnail(data), media_type="image/webp")
 
 
 @v1.get("/images/{filename}/meta", summary="Image dimensions, format, size")
 def v1_image_metadata(filename: str):
     try:
         path = file_svc_get_path("images", filename)
+        data = file_svc_read("images", filename)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Image not found")
-    return image_svc_metadata(path)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return image_svc_metadata_from_bytes(data, path)
 
 
 @v1.get("/images", summary="List all stored images")
@@ -450,24 +465,33 @@ def v1_delete_image(filename: str):
         raise HTTPException(status_code=404, detail="Image not found")
 
 
-#v1 notes endpoints
-@v1.post("/notes/upload", summary="Upload & encrypt note (Fernet AES)")
+# Notes 
+
+@v1.post("/notes/upload", summary="Upload note -> encrypt -> store")
 async def v1_upload_note(file: UploadFile = File(...)):
-    
     data      = await file.read()
-    encrypted = notes_svc_encrypt(data)
+    encrypted = notes_svc_encrypt(data)           # encrypt
     enc_name  = file.filename + ".enc"
 
-    result = file_svc_upload("notes", enc_name, encrypted)
-    result["encrypted"]            = True
-    result["original_size_bytes"]  = len(data)
-    result["encrypted_size_bytes"] = len(encrypted)
-    return result
+    # file_svc_upload would double-encrypt; write directly instead.
+    timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name  = enc_name.replace(" ", "_")
+    final_name = f"{timestamp}_{safe_name}"
+    filepath   = STORAGE / "notes" / final_name
+    filepath.write_bytes(encrypted)
+
+    return {
+        "filename":              final_name,
+        "category":              "notes",
+        "encrypted":             True,
+        "original_size_bytes":   len(data),
+        "encrypted_size_bytes":  len(encrypted),
+        "size_mb":               round(len(encrypted) / 1024 / 1024, 2),
+    }
 
 
-@v1.get("/notes/{filename}", summary="Fetch & decrypt note → plaintext")
+@v1.get("/notes/{filename}", summary="Decrypt note -> plaintext")
 def v1_get_note(filename: str):
-
     try:
         path = file_svc_get_path("notes", filename)
     except FileNotFoundError:
@@ -483,7 +507,6 @@ def v1_get_note(filename: str):
 
 @v1.get("/notes/{filename}/preview", summary="Decrypted preview (first N chars)")
 def v1_note_preview(filename: str, chars: int = 500):
-    
     try:
         path = file_svc_get_path("notes", filename)
     except FileNotFoundError:
@@ -510,39 +533,42 @@ def v1_delete_note(filename: str):
         raise HTTPException(status_code=404, detail="Note not found")
 
 
-#v1 datasets endpoints
+# Datasets
 
-@v1.post("/datasets/upload", summary="Upload a dataset (CSV, JSON, Parquet…)")
+@v1.post("/datasets/upload", summary="Upload dataset → encrypt → store")
 async def v1_upload_dataset(file: UploadFile = File(...)):
     data   = await file.read()
+    # encrypt -> disk
     result = file_svc_upload("datasets", file.filename, data)
     return result
 
 
-@v1.get("/datasets/{filename}/preview", summary="Preview first N rows of a CSV")
+@v1.get("/datasets/{filename}/preview", summary="Decrypt -> preview first N rows (CSV only)")
 def v1_dataset_preview(filename: str, rows: int = 10):
-    
     try:
-        path = file_svc_get_path("datasets", filename)
+        data = file_svc_read("datasets", filename)   # disk → decrypt
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
-    if path.suffix.lower() != ".csv":
+    if not filename.lower().endswith(".csv"):
         raise HTTPException(status_code=415, detail="Preview is only available for .csv files")
 
-    return dataset_svc_preview(path, rows)
+    return dataset_svc_preview(data, filename, rows)
 
 
-@v1.get("/datasets/{filename}/download", summary="Streaming download (safe for large files)")
+@v1.get("/datasets/{filename}/download", summary="Decrypt -> streaming download")
 def v1_dataset_download(filename: str):
-    
     try:
-        path = file_svc_get_path("datasets", filename)
+        data = file_svc_read("datasets", filename)   # disk → decrypt → full bytes in memory
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     return StreamingResponse(
-        _dataset_stream_chunks(path),
+        _stream_bytes(data),
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
@@ -561,26 +587,21 @@ def v1_delete_dataset(filename: str):
         raise HTTPException(status_code=404, detail="Dataset not found")
 
 
-#v1 video endpoints
-@v1.post("/general/upload", summary="Upload file; videos are H.264-compressed")
+# General / Video
+@v1.post("/general/upload", summary="Upload file; videos -> H.264 compress -> encrypt -> store")
 async def v1_upload_general(file: UploadFile = File(...)):
-    """
-    Video files (.mp4, .mov, .avi, .mkv, .webm, .m4v) are re-encoded to
-    H.264/AAC at CRF 28 with +faststart. Other files are stored as-is.
-    ffmpeg must be installed on the server: sudo apt install ffmpeg
-    """
+    
     data     = await file.read()
     filename = file.filename
 
     if general_svc_is_video(filename):
-        # Write raw upload to a temp path, run ffmpeg, read output, clean up.
-        tmp_in  = STORAGE / "general" / f"_tmp_in_{filename}"
-        stem    = Path(filename).stem
+        tmp_in   = STORAGE / "general" / f"_tmp_in_{filename}"
+        stem     = Path(filename).stem
         out_name = f"{stem}_compressed.mp4"
-        tmp_out = STORAGE / "general" / f"_tmp_out_{out_name}"
+        tmp_out  = STORAGE / "general" / f"_tmp_out_{out_name}"
 
         try:
-            tmp_in.write_bytes(data)
+            tmp_in.write_bytes(data)                           # raw write (temp only)
             stats = general_svc_compress_video(tmp_in, tmp_out)
             compressed_data = tmp_out.read_bytes()
         except RuntimeError as e:
@@ -589,35 +610,33 @@ async def v1_upload_general(file: UploadFile = File(...)):
             tmp_in.unlink(missing_ok=True)
             tmp_out.unlink(missing_ok=True)
 
+        # encrypt the compressed video -> disk
         result = file_svc_upload("general", out_name, compressed_data)
         result.update(stats)
         result["compressed"] = True
         return result
 
-    # Non-video: store as-is.
     result = file_svc_upload("general", filename, data)
     result["compressed"] = False
     return result
 
 
-@v1.get("/general/{filename}", summary="Download file; videos are streamed")
+@v1.get("/general/{filename}", summary="Decrypt → stream video / download file")
 def v1_get_general(filename: str):
-    """
-    Video files are streamed in 64 KB chunks (supports HTTP range-style playback).
-    All other files use a standard FileResponse.
-    """
     try:
-        path = file_svc_get_path("general", filename)
+        data = file_svc_read("general", filename)   # disk → decrypt → bytes
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     if general_svc_is_video(filename):
         return StreamingResponse(
-            _dataset_stream_chunks(path),
+            _stream_bytes(data),
             media_type="video/mp4",
             headers={"Content-Disposition": f'inline; filename="{filename}"'},
         )
-    return FileResponse(path)
+    return Response(content=data, media_type="application/octet-stream")
 
 
 @v1.get("/general", summary="List all general files")
@@ -633,7 +652,7 @@ def v1_delete_general(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
-
+#Status
 @v1.get("/status", summary="Disk usage per category + total disk stats")
 def v1_status():
     return status_svc_disk_usage()
