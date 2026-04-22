@@ -12,10 +12,10 @@
         :root {
             --accent: #22d3ee;
             --accent-dim: #0e7490;
-            --surface: #111113;
-            --surface-2: #18181b;
-            --surface-3: #27272a;
-            --border: #3f3f46;
+            --surface: #000000;
+            --surface-2: #000000;
+            --surface-3: #0a0a0a;
+            --border: #1a1a1a;
             --text-muted: #71717a;
         }
 
@@ -108,15 +108,16 @@
 </head>
 <body>
 
-<nav class="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+<nav class="sticky top-0 z-50 border-b border-zinc-800 bg-black/90 backdrop-blur-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
         <a href="/home"
            hx-get="/home"
            hx-target="body"
            hx-swap="outerHTML"
            hx-push-url="true"
-           class="text-lg font-extrabold tracking-tight flex items-center gap-2 shrink-0">
-            ☁️ <span class="hidden sm:inline">Private Cloud</span>
+           class="text-lg font-extrabold tracking-tight flex items-center gap-3 shrink-0">
+            <img src="/icons/cloudlogo.jpg" alt="Private Cloud" class="w-16 h-16 object-contain rounded-xl">
+            <span class="hidden sm:inline text-xl">Private Cloud</span>
         </a>
 
         <div class="flex items-center gap-4 sm:gap-6">

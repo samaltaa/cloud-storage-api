@@ -23,6 +23,7 @@ load_dotenv()
 app = FastAPI(title="Private Cloud", version="2.0")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/icons", StaticFiles(directory="icons"), name="icons")
 templates = Jinja2Templates(directory="templates")
 
 app.add_middleware(
@@ -32,7 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-STORAGE    = Path("C:/Users/Grace/cloud-storage-api/storage")
+STORAGE    = Path("storage")
 CATEGORIES = ["images", "notes", "datasets", "general"]
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"}

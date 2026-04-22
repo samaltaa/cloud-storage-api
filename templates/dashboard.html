@@ -68,7 +68,7 @@
                 <div>
                     <div class="flex justify-between items-baseline mb-1.5">
                         <span class="capitalize font-semibold text-sm flex items-center gap-2">
-                            {% if cat == "images" %}🖼️{% elif cat == "notes" %}📝{% elif cat == "datasets" %}📊{% else %}📁{% endif %}
+                            {% if cat == "images" %}<img src="/icons/imageslogo.jpg" class="w-5 h-5 object-contain">{% elif cat == "notes" %}<img src="/icons/noteslogo.jpg" class="w-5 h-5 object-contain">{% elif cat == "datasets" %}<img src="/icons/datasetslogo.jpg" class="w-5 h-5 object-contain">{% else %}<img src="/icons/folderslogo.jpg" class="w-5 h-5 object-contain">{% endif %}
                             {{ cat }}
                         </span>
                         <span class="mono text-xs {{ colors_text[loop.index0 % 4] }}">
@@ -107,8 +107,8 @@
            hx-swap="outerHTML"
            hx-push-url="true"
            class="card {{ colors_card[loop.index0 % 4] }} p-4 sm:p-5 block transition-all hover:scale-[1.02] active:scale-95 touch-manipulation">
-            <div class="text-2xl mb-2">
-                {% if cat == "images" %}🖼️{% elif cat == "notes" %}📝{% elif cat == "datasets" %}📊{% else %}📁{% endif %}
+            <div class="mb-2">
+                {% if cat == "images" %}<img src="/icons/imageslogo.jpg" class="w-8 h-8 object-contain">{% elif cat == "notes" %}<img src="/icons/noteslogo.jpg" class="w-8 h-8 object-contain">{% elif cat == "datasets" %}<img src="/icons/datasetslogo.jpg" class="w-8 h-8 object-contain">{% else %}<img src="/icons/folderslogo.jpg" class="w-8 h-8 object-contain">{% endif %}
             </div>
             <p class="font-bold capitalize text-sm">{{ cat }}</p>
             <p class="mono text-zinc-500 text-xs mt-1">{{ cat_data.file_count }} file{{ 's' if cat_data.file_count != 1 else '' }}</p>
@@ -119,11 +119,12 @@
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script id="chart-data"
+<div id="chart-data"
     data-counts="{{ chart_counts_json }}"
-    data-labels="{{ chart_labels_json }}">
-</script>
+    data-labels="{{ chart_labels_json }}"
+    class="hidden">
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 (function () {
     const el     = document.getElementById("chart-data");

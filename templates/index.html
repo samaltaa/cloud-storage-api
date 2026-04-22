@@ -20,11 +20,15 @@
             hx-push-url="true"
             class="card p-5 sm:p-8 text-center cursor-pointer hover:scale-[1.02] hover:border-cyan-500 group active:scale-95 touch-manipulation">
 
-            <div class="text-4xl sm:text-5xl mb-3 sm:mb-5">
-                {% if cat == "images" %}🖼️
-                {% elif cat == "notes" %}📝
-                {% elif cat == "datasets" %}📊
-                {% else %}📁
+            <div class="flex justify-center mb-3 sm:mb-5">
+                {% if cat == "images" %}
+                <img src="/icons/imageslogo.jpg" alt="images" class="w-12 h-12 sm:w-16 sm:h-16 object-contain">
+                {% elif cat == "notes" %}
+                <img src="/icons/noteslogo.jpg" alt="notes" class="w-12 h-12 sm:w-16 sm:h-16 object-contain">
+                {% elif cat == "datasets" %}
+                <img src="/icons/datasetslogo.jpg" alt="datasets" class="w-12 h-12 sm:w-16 sm:h-16 object-contain">
+                {% else %}
+                <img src="/icons/folderslogo.jpg" alt="general" class="w-12 h-12 sm:w-16 sm:h-16 object-contain">
                 {% endif %}
             </div>
             <h3 class="text-base sm:text-xl font-bold capitalize mb-1">{{ cat }}</h3>
