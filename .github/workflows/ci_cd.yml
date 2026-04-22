@@ -1,0 +1,34 @@
+name: Deploy to Ubuntu Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_PRIVATE_KEY }}
+          port:     ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+
+            cd ${{ secrets.APP_DIR }}
+
+            git pull origin main
+
+            source venv/bin/activate
+            pip install -r requirements.txt --quiet
+
+            sudo systemctl restart ${{ secrets.SYSTEMD_SERVICE }}
+            sudo systemctl status  ${{ secrets.SYSTEMD_SERVICE }} --no-pager
