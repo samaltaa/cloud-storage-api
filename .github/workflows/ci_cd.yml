@@ -60,3 +60,5 @@ jobs:
 
             echo "Recent logs:"
             sudo journalctl -u ${{ secrets.SYSTEMD_SERVICE }} -n 20 --no-pager
+
+            
