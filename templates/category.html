@@ -101,8 +101,18 @@
                 <a href="/api/v1/datasets/{{ file.name }}/download"
                    class="btn-ghost text-xs">↓ Download</a>
                 {% else %}
+                {% set video_exts = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"] %}
+                {% if file.name.rsplit(".", 1)|last|lower in ["mp4", "mov", "avi", "mkv", "webm", "m4v"] %}
+                <a href="/player/{{ file.name }}"
+                   hx-get="/player/{{ file.name }}"
+                   hx-target="body"
+                   hx-swap="outerHTML"
+                   hx-push-url="true"
+                   class="btn-ghost text-xs">▶ Play</a>
+                {% else %}
                 <a href="/api/v1/general/{{ file.name }}"
                    class="btn-ghost text-xs">↓ Download</a>
+                {% endif %}
                 {% endif %}
 
                 <button

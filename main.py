@@ -330,6 +330,17 @@ async def category_page(request: Request, category: str):
     return templates.TemplateResponse(request=request, name="category.html", context={"category": category, "files": data["files"]})
 
 
+@app.get("/player/{filename}", response_class=HTMLResponse)
+async def player_page(request: Request, filename: str):
+    try:
+        file_svc_get_path("general", filename)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+    if not general_svc_is_video(filename):
+        raise HTTPException(status_code=400, detail="Not a video file")
+    return templates.TemplateResponse(request=request, name="player.html", context={"filename": filename})
+
+
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
     counts = _category_counts()
@@ -613,7 +624,7 @@ async def v1_upload_general(file: UploadFile = File(...)):
 
 
 @v1.get("/general/{filename}", summary="Decrypt → stream video / download file")
-def v1_get_general(filename: str):
+def v1_get_general(filename: str, request: Request):
     try:
         data = file_svc_read("general", filename)
     except FileNotFoundError:
@@ -622,11 +633,50 @@ def v1_get_general(filename: str):
         raise HTTPException(status_code=422, detail=str(e))
 
     if general_svc_is_video(filename):
-        return StreamingResponse(
-            _stream_bytes(data),
+        total        = len(data)
+        range_header = request.headers.get("range")
+
+        if range_header:
+            try:
+                units, ranges = range_header.split("=", 1)
+                start_str, end_str = ranges.split("-", 1)
+                start = int(start_str) if start_str else 0
+                end   = int(end_str)   if end_str   else total - 1
+            except Exception:
+                raise HTTPException(status_code=416, detail="Invalid Range header")
+
+            if start >= total or end >= total or start > end:
+                return Response(
+                    status_code=416,
+                    headers={"Content-Range": f"bytes */{total}"},
+                )
+
+            chunk = data[start:end + 1]
+            return Response(
+                content=chunk,
+                status_code=206,
+                media_type="video/mp4",
+                headers={
+                    "Content-Range":               f"bytes {start}-{end}/{total}",
+                    "Accept-Ranges":               "bytes",
+                    "Content-Length":              str(len(chunk)),
+                    "Content-Disposition":         f'inline; filename="{filename}"',
+                    "Cache-Control":               "no-cache",
+                },
+            )
+
+        return Response(
+            content=data,
+            status_code=200,
             media_type="video/mp4",
-            headers={"Content-Disposition": f'inline; filename="{filename}"'},
+            headers={
+                "Accept-Ranges":       "bytes",
+                "Content-Length":      str(total),
+                "Content-Disposition": f'inline; filename="{filename}"',
+                "Cache-Control":       "no-cache",
+            },
         )
+
     return Response(content=data, media_type="application/octet-stream")
 
 
