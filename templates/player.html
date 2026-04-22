@@ -2,6 +2,10 @@
 {% block title %}{{ filename }} — Player{% endblock %}
 
 {% block content %}
+
+<!-- Lucide Icons CDN -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
 <div class="fade-up">
 
     <div class="mb-4 sm:mb-6">
@@ -36,53 +40,67 @@
                     bg-gradient-to-t from-black/90 to-transparent
                     transition-opacity duration-300">
 
+            <!-- progress -->
             <div class="flex items-center gap-2 mb-3">
                 <span id="cur" class="mono text-xs text-zinc-300 w-10 shrink-0">0:00</span>
+
                 <div id="progress-track"
                      class="flex-1 h-1.5 bg-zinc-700 rounded-full relative cursor-pointer group">
+
                     <div id="progress-buf"
                          class="absolute inset-y-0 left-0 bg-zinc-600 rounded-full"
                          style="width:0%"></div>
+
                     <div id="progress-fill"
                          class="absolute inset-y-0 left-0 bg-cyan-400 rounded-full"
                          style="width:0%"></div>
+
                     <div id="progress-thumb"
                          class="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow
                                 opacity-0 group-hover:opacity-100 transition-opacity -translate-x-1/2"
                          style="left:0%"></div>
                 </div>
+
                 <span id="dur" class="mono text-xs text-zinc-300 w-10 shrink-0 text-right">0:00</span>
             </div>
 
+            <!-- controls -->
             <div class="flex items-center justify-between gap-2">
 
+                <!-- left controls -->
                 <div class="flex items-center gap-1 sm:gap-2">
+
                     <button id="btn-rewind"
-                            class="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/10 transition text-white text-sm font-bold"
+                            class="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/10 transition text-white"
                             title="Rewind 10s">
-                        ↺
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                     </button>
 
                     <button id="btn-play"
-                            class="w-10 h-10 flex items-center justify-center rounded-xl bg-cyan-500 hover:bg-cyan-400 transition text-black font-bold text-lg"
+                            class="w-10 h-10 flex items-center justify-center rounded-xl bg-cyan-500 hover:bg-cyan-400 transition text-black"
                             title="Play / Pause">
-                        ▶
+                        <i data-lucide="play" class="w-5 h-5"></i>
                     </button>
 
                     <button id="btn-forward"
-                            class="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/10 transition text-white text-sm font-bold"
+                            class="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/10 transition text-white"
                             title="Forward 10s">
-                        ↻
+                        <i data-lucide="rotate-cw" class="w-4 h-4"></i>
                     </button>
+
                 </div>
 
+                <!-- right controls -->
                 <div class="flex items-center gap-1 sm:gap-3">
+
                     <div class="flex items-center gap-1.5">
+
                         <button id="btn-mute"
-                                class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white/10 transition text-white text-sm"
+                                class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white/10 transition text-white"
                                 title="Mute">
-                            🔊
+                            <i data-lucide="volume-2" class="w-4 h-4"></i>
                         </button>
+
                         <input id="volume"
                                type="range" min="0" max="1" step="0.05" value="1"
                                class="w-16 sm:w-24 accent-cyan-400 cursor-pointer">
@@ -99,15 +117,15 @@
                     </select>
 
                     <button id="btn-fs"
-                            class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white/10 transition text-white text-sm"
+                            class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white/10 transition text-white"
                             title="Fullscreen">
-                        ⛶
+                        <i data-lucide="maximize" class="w-4 h-4"></i>
                     </button>
+
                 </div>
             </div>
         </div>
     </div>
-
 </div>
 
 <script>
@@ -117,15 +135,19 @@
     const controls  = document.getElementById("controls");
     const overlay   = document.getElementById("overlay");
     const overlayIcon = document.getElementById("overlay-icon");
+
     const btnPlay   = document.getElementById("btn-play");
     const btnRewind = document.getElementById("btn-rewind");
     const btnFwd    = document.getElementById("btn-forward");
     const btnMute   = document.getElementById("btn-mute");
     const btnFs     = document.getElementById("btn-fs");
+
     const volSlider = document.getElementById("volume");
     const speedSel  = document.getElementById("speed");
+
     const curEl     = document.getElementById("cur");
     const durEl     = document.getElementById("dur");
+
     const track     = document.getElementById("progress-track");
     const fillEl    = document.getElementById("progress-fill");
     const bufEl     = document.getElementById("progress-buf");
@@ -143,16 +165,32 @@
     }
 
     function flash(icon) {
-        overlayIcon.textContent = icon;
+        overlayIcon.innerHTML = icon;
+        lucide.createIcons();
         overlay.style.opacity = "1";
         clearTimeout(overlayTimer);
-        overlayTimer = setTimeout(() => { overlay.style.opacity = "0"; }, 700);
+        overlayTimer = setTimeout(() => overlay.style.opacity = "0", 700);
     }
 
     function showControls() {
         controls.style.opacity = "1";
         clearTimeout(hideTimer);
-        if (!vid.paused) hideTimer = setTimeout(() => { controls.style.opacity = "0"; }, 2500);
+        if (!vid.paused)
+            hideTimer = setTimeout(() => controls.style.opacity = "0", 2500);
+    }
+
+    function setPlayIcon(isPlaying) {
+        btnPlay.innerHTML = isPlaying
+            ? '<i data-lucide="pause" class="w-5 h-5"></i>'
+            : '<i data-lucide="play" class="w-5 h-5"></i>';
+        lucide.createIcons();
+    }
+
+    function setMuteIcon(muted) {
+        btnMute.innerHTML = muted
+            ? '<i data-lucide="volume-x" class="w-4 h-4"></i>'
+            : '<i data-lucide="volume-2" class="w-4 h-4"></i>';
+        lucide.createIcons();
     }
 
     wrap.addEventListener("mousemove", showControls);
@@ -163,9 +201,13 @@
         durEl.textContent = fmt(vid.duration);
     });
 
-    vid.addEventListener("play",  function () { btnPlay.textContent = "⏸"; showControls(); });
+    vid.addEventListener("play", function () {
+        setPlayIcon(true);
+        showControls();
+    });
+
     vid.addEventListener("pause", function () {
-        btnPlay.textContent = "▶";
+        setPlayIcon(false);
         controls.style.opacity = "1";
         clearTimeout(hideTimer);
     });
@@ -175,124 +217,73 @@
         const pct = vid.currentTime / vid.duration * 100;
         fillEl.style.width = pct + "%";
         thumbEl.style.left = pct + "%";
-        curEl.textContent  = fmt(vid.currentTime);
+        curEl.textContent = fmt(vid.currentTime);
     });
 
     vid.addEventListener("progress", function () {
         if (!ready) return;
         for (let i = 0; i < vid.buffered.length; i++) {
-            if (vid.buffered.start(i) <= vid.currentTime && vid.currentTime <= vid.buffered.end(i)) {
-                bufEl.style.width = (vid.buffered.end(i) / vid.duration * 100) + "%";
+            if (vid.buffered.start(i) <= vid.currentTime &&
+                vid.currentTime <= vid.buffered.end(i)) {
+                bufEl.style.width =
+                    (vid.buffered.end(i) / vid.duration * 100) + "%";
             }
         }
     });
 
     vid.addEventListener("click", function () {
-        if (vid.paused) { vid.play(); flash("▶"); }
-        else            { vid.pause(); flash("⏸"); }
+        if (vid.paused) { vid.play(); flash(lucide.icons.play); }
+        else { vid.pause(); flash(lucide.icons.pause); }
     });
 
-    btnPlay.addEventListener("click", function (e) {
+    btnPlay.addEventListener("click", e => {
         e.stopPropagation();
-        if (vid.paused) { vid.play(); }
-        else            { vid.pause(); }
+        vid.paused ? vid.play() : vid.pause();
     });
 
-    btnRewind.addEventListener("click", function (e) {
+    btnRewind.addEventListener("click", e => {
         e.stopPropagation();
-        if (!ready) return;
-        var t = vid.currentTime - 10;
-        vid.currentTime = t < 0 ? 0 : t;
-        flash("↺ 10s");
+        vid.currentTime = Math.max(0, vid.currentTime - 10);
+        flash('<i data-lucide="rotate-ccw"></i>');
+        lucide.createIcons();
     });
 
-    btnFwd.addEventListener("click", function (e) {
+    btnFwd.addEventListener("click", e => {
         e.stopPropagation();
-        if (!ready) return;
-        var t = vid.currentTime + 10;
-        vid.currentTime = t > vid.duration ? vid.duration : t;
-        flash("10s ↻");
+        vid.currentTime = Math.min(vid.duration, vid.currentTime + 10);
+        flash('<i data-lucide="rotate-cw"></i>');
+        lucide.createIcons();
     });
 
-    track.addEventListener("mousedown", function (e) {
-        e.stopPropagation();
-        if (!ready) return;
-        scrubbing = true;
-        var rect = track.getBoundingClientRect();
-        var pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        vid.currentTime = pct * vid.duration;
-        fillEl.style.width = (pct * 100) + "%";
-        thumbEl.style.left = (pct * 100) + "%";
-    });
-
-    document.addEventListener("mousemove", function (e) {
-        if (!scrubbing || !ready) return;
-        var rect = track.getBoundingClientRect();
-        var pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        vid.currentTime = pct * vid.duration;
-        fillEl.style.width = (pct * 100) + "%";
-        thumbEl.style.left = (pct * 100) + "%";
-        curEl.textContent  = fmt(vid.currentTime);
-    });
-
-    document.addEventListener("mouseup", function () { scrubbing = false; });
-
-    track.addEventListener("touchstart", function (e) {
-        e.stopPropagation();
-        if (!ready) return;
-        scrubbing = true;
-        var rect = track.getBoundingClientRect();
-        var pct  = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
-        vid.currentTime = pct * vid.duration;
-        fillEl.style.width = (pct * 100) + "%";
-        thumbEl.style.left = (pct * 100) + "%";
-    }, { passive: true });
-
-    document.addEventListener("touchmove", function (e) {
-        if (!scrubbing || !ready) return;
-        var rect = track.getBoundingClientRect();
-        var pct  = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
-        vid.currentTime = pct * vid.duration;
-        fillEl.style.width = (pct * 100) + "%";
-        thumbEl.style.left = (pct * 100) + "%";
-        curEl.textContent  = fmt(vid.currentTime);
-    }, { passive: true });
-
-    document.addEventListener("touchend", function () { scrubbing = false; });
-
-    volSlider.addEventListener("input", function () {
-        vid.volume = parseFloat(volSlider.value);
-        vid.muted  = vid.volume === 0;
-        btnMute.textContent = vid.muted ? "🔇" : "🔊";
-    });
-
-    btnMute.addEventListener("click", function (e) {
+    btnMute.addEventListener("click", e => {
         e.stopPropagation();
         vid.muted = !vid.muted;
-        btnMute.textContent = vid.muted ? "🔇" : "🔊";
+        setMuteIcon(vid.muted);
         volSlider.value = vid.muted ? 0 : vid.volume;
     });
 
-    speedSel.addEventListener("change", function () {
+    volSlider.addEventListener("input", () => {
+        vid.volume = parseFloat(volSlider.value);
+        vid.muted = vid.volume === 0;
+        setMuteIcon(vid.muted);
+    });
+
+    speedSel.addEventListener("change", () => {
         vid.playbackRate = parseFloat(speedSel.value);
     });
 
-    btnFs.addEventListener("click", function (e) {
+    btnFs.addEventListener("click", e => {
         e.stopPropagation();
-        if (!document.fullscreenElement) wrap.requestFullscreen();
-        else document.exitFullscreen();
+        document.fullscreenElement
+            ? document.exitFullscreen()
+            : wrap.requestFullscreen();
     });
 
-    document.addEventListener("keydown", function (e) {
-        if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
-        if (e.code === "Space")      { e.preventDefault(); btnPlay.click(); }
-        if (e.code === "ArrowLeft")  { e.preventDefault(); btnRewind.click(); }
-        if (e.code === "ArrowRight") { e.preventDefault(); btnFwd.click(); }
-        if (e.code === "ArrowUp")    { e.preventDefault(); vid.volume = Math.min(1, vid.volume + 0.1); volSlider.value = vid.volume; }
-        if (e.code === "ArrowDown")  { e.preventDefault(); vid.volume = Math.max(0, vid.volume - 0.1); volSlider.value = vid.volume; }
-        if (e.code === "KeyM")       { btnMute.click(); }
-        if (e.code === "KeyF")       { btnFs.click(); }
-    });
+    lucide.createIcons();
+    setPlayIcon(false);
+    setMuteIcon(false);
+
 })();
 </script>
+
 {% endblock %}
