@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 import io
 import csv
+import json
 import base64
 import hashlib
 import shutil
@@ -31,8 +32,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Config
-
 STORAGE    = Path("C:/Users/Grace/cloud-storage-api/storage")
 CATEGORIES = ["images", "notes", "datasets", "general"]
 
@@ -51,8 +50,6 @@ AUDIO_BITRATE = "128k"
 
 for _cat in CATEGORIES:
     (STORAGE / _cat).mkdir(parents=True, exist_ok=True)
-
-# Encryption — single Fernet instance shared across the whole app.
 
 _SECRET = os.getenv("CLOUD_SECRET_KEY")
 
@@ -75,9 +72,6 @@ def decrypt(data: bytes) -> bytes:
         raise ValueError("Decryption failed — wrong key or corrupted file.")
 
 
-
-# File services  (all writes go through encrypt; all reads go through decrypt)
-
 def file_svc_list_all() -> dict:
     result = {}
     total  = 0
@@ -95,7 +89,7 @@ def file_svc_list_category(category: str) -> dict:
         filepath = cat_path / f
         stat     = filepath.stat()
         files.append({
-            "name":      f,
+            "name":       f,
             "size_bytes": stat.st_size,
             "size_mb":    round(stat.st_size / 1024 / 1024, 2),
             "modified":   datetime.fromtimestamp(stat.st_mtime).isoformat(),
@@ -113,11 +107,11 @@ def file_svc_upload(category: str, filename: str, data: bytes) -> dict:
     filepath.write_bytes(encrypted)
 
     return {
-        "filename":         final_name,
-        "category":         category,
-        "size_bytes":       len(data),
-        "size_mb":          round(len(data) / 1024 / 1024, 2),
-        "encrypted":        True,
+        "filename":          final_name,
+        "category":          category,
+        "size_bytes":        len(data),
+        "size_mb":           round(len(data) / 1024 / 1024, 2),
+        "encrypted":         True,
         "stored_size_bytes": len(encrypted),
     }
 
@@ -143,8 +137,6 @@ def file_svc_delete(category: str, filename: str) -> dict:
     filepath.unlink()
     return {"deleted": filename, "category": category}
 
-
-# Image services
 
 def image_svc_compress(data: bytes, original_filename: str) -> tuple[bytes, str]:
     img = Image.open(io.BytesIO(data))
@@ -187,11 +179,11 @@ def image_svc_metadata_from_bytes(data: bytes, filepath: Path) -> dict:
     img  = Image.open(io.BytesIO(data))
     stat = filepath.stat()
     return {
-        "filename": filepath.name,
-        "format":   img.format,
-        "mode":     img.mode,
-        "width":    img.width,
-        "height":   img.height,
+        "filename":          filepath.name,
+        "format":            img.format,
+        "mode":              img.mode,
+        "width":             img.width,
+        "height":            img.height,
         "stored_size_bytes": stat.st_size,
         "stored_size_mb":    round(stat.st_size / 1024 / 1024, 2),
         "modified":          datetime.fromtimestamp(stat.st_mtime).isoformat(),
@@ -207,8 +199,6 @@ def image_svc_thumbnail(data: bytes) -> bytes:
     return buf.read()
 
 
-# Note services  (notes use the shared encrypt/decrypt — no double-wrap)
-
 def notes_svc_encrypt(data: bytes) -> bytes:
     return encrypt(data)
 
@@ -222,10 +212,6 @@ def notes_svc_preview(filepath: Path, chars: int = 500) -> str:
     plaintext = notes_svc_decrypt(raw)
     text      = plaintext.decode("utf-8", errors="replace")
     return text[:chars] + ("…" if len(text) > chars else "")
-
-
-
-# Dataset services
 
 
 def dataset_svc_preview(data: bytes, filename: str, rows: int = 10) -> dict:
@@ -260,8 +246,6 @@ def _stream_bytes(data: bytes, chunk_size: int = 65536):
         yield chunk
 
 
-# Video / general services
-
 def general_svc_is_video(filename: str) -> bool:
     return Path(filename).suffix.lower() in VIDEO_EXTENSIONS
 
@@ -294,8 +278,6 @@ def general_svc_compress_video(input_path: Path, output_path: Path) -> dict:
     }
 
 
-# Status service
-
 def status_svc_disk_usage() -> dict:
     total, used, free = shutil.disk_usage(STORAGE)
     per_category      = {}
@@ -317,19 +299,44 @@ def status_svc_disk_usage() -> dict:
     }
 
 
-# Helper
-
 def _require_category(category: str):
     if category not in CATEGORIES:
         raise HTTPException(status_code=404, detail=f"Unknown category: '{category}'")
 
 
-# Legacy routes  (kept for backward-compat; encryption applied transparently)
+def _category_counts() -> dict[str, int]:
+    return {cat: len(os.listdir(STORAGE / cat)) for cat in CATEGORIES}
+
 
 @app.get("/", response_class=HTMLResponse)
+async def root_redirect(request: Request):
+    counts = _category_counts()
+    total  = sum(counts.values())
+    return templates.TemplateResponse(request=request, name="index.html", context={"categories": CATEGORIES, "total_files": total, "category_counts": counts})
+
+
+@app.get("/home", response_class=HTMLResponse)
 async def homepage(request: Request):
-    data = file_svc_list_all()
-    return templates.TemplateResponse("index.html", {"request": request, **data})
+    counts = _category_counts()
+    total  = sum(counts.values())
+    return templates.TemplateResponse(request=request, name="index.html", context={"categories": CATEGORIES, "total_files": total, "category_counts": counts})
+
+
+@app.get("/category/{category}", response_class=HTMLResponse)
+async def category_page(request: Request, category: str):
+    _require_category(category)
+    data = file_svc_list_category(category)
+    return templates.TemplateResponse(request=request, name="category.html", context={"category": category, "files": data["files"]})
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(request: Request):
+    counts = _category_counts()
+    total  = sum(counts.values())
+    disk   = status_svc_disk_usage()
+    chart_counts = [disk["storage_by_category"][c]["file_count"] for c in CATEGORIES]
+    chart_labels = [c.capitalize() for c in CATEGORIES]
+    return templates.TemplateResponse(request=request, name="dashboard.html", context={"categories": CATEGORIES, "total_files": total, "disk": disk, "chart_counts_json": json.dumps(chart_counts), "chart_labels_json": json.dumps(chart_labels)})
 
 
 @app.get("/files")
@@ -347,7 +354,6 @@ def list_category_files(category: str):
 async def upload_file(category: str, file: UploadFile = File(...)):
     _require_category(category)
     data = await file.read()
-    # data → encrypt → disk  (no compression on the legacy route)
     return file_svc_upload(category, file.filename, data)
 
 
@@ -355,7 +361,7 @@ async def upload_file(category: str, file: UploadFile = File(...)):
 def download_file(category: str, filename: str):
     _require_category(category)
     try:
-        data = file_svc_read(category, filename)   # disk → decrypt → bytes
+        data = file_svc_read(category, filename)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
     except ValueError as e:
@@ -377,13 +383,9 @@ def status():
     return status_svc_disk_usage()
 
 
-
-# API v1
-
 v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 
 
-#Images 
 @v1.post("/images/upload", summary="Upload image → WebP compress → encrypt → store")
 async def v1_upload_image(file: UploadFile = File(...)):
     ext = Path(file.filename).suffix.lower()
@@ -394,13 +396,11 @@ async def v1_upload_image(file: UploadFile = File(...)):
         )
     raw = await file.read()
 
-    # 1. Compress to WebP
     try:
         compressed, new_name = image_svc_compress(raw, file.filename)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Image processing failed: {e}")
 
-    # 2. Encrypt (inside file_svc_upload) -> write to disk
     result = file_svc_upload("images", new_name, compressed)
     result["original_size_kb"]   = round(len(raw)        / 1024, 1)
     result["compressed_size_kb"] = round(len(compressed) / 1024, 1)
@@ -409,10 +409,9 @@ async def v1_upload_image(file: UploadFile = File(...)):
     return result
 
 
-@v1.get("/images/{filename}", summary="Decrypt -> decode WebP -> return PNG/JPEG")
+@v1.get("/images/{filename}", summary="Decrypt → decode WebP → return PNG/JPEG")
 def v1_get_image(filename: str, format: str = "png"):
     try:
-        # disk → decrypt → WebP bytes
         data = file_svc_read("images", filename)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Image not found")
@@ -465,15 +464,12 @@ def v1_delete_image(filename: str):
         raise HTTPException(status_code=404, detail="Image not found")
 
 
-# Notes 
-
-@v1.post("/notes/upload", summary="Upload note -> encrypt -> store")
+@v1.post("/notes/upload", summary="Upload note → encrypt → store")
 async def v1_upload_note(file: UploadFile = File(...)):
     data      = await file.read()
-    encrypted = notes_svc_encrypt(data)           # encrypt
+    encrypted = notes_svc_encrypt(data)
     enc_name  = file.filename + ".enc"
 
-    # file_svc_upload would double-encrypt; write directly instead.
     timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_name  = enc_name.replace(" ", "_")
     final_name = f"{timestamp}_{safe_name}"
@@ -481,16 +477,16 @@ async def v1_upload_note(file: UploadFile = File(...)):
     filepath.write_bytes(encrypted)
 
     return {
-        "filename":              final_name,
-        "category":              "notes",
-        "encrypted":             True,
-        "original_size_bytes":   len(data),
-        "encrypted_size_bytes":  len(encrypted),
-        "size_mb":               round(len(encrypted) / 1024 / 1024, 2),
+        "filename":             final_name,
+        "category":             "notes",
+        "encrypted":            True,
+        "original_size_bytes":  len(data),
+        "encrypted_size_bytes": len(encrypted),
+        "size_mb":              round(len(encrypted) / 1024 / 1024, 2),
     }
 
 
-@v1.get("/notes/{filename}", summary="Decrypt note -> plaintext")
+@v1.get("/notes/{filename}", summary="Decrypt note → plaintext")
 def v1_get_note(filename: str):
     try:
         path = file_svc_get_path("notes", filename)
@@ -533,20 +529,17 @@ def v1_delete_note(filename: str):
         raise HTTPException(status_code=404, detail="Note not found")
 
 
-# Datasets
-
 @v1.post("/datasets/upload", summary="Upload dataset → encrypt → store")
 async def v1_upload_dataset(file: UploadFile = File(...)):
     data   = await file.read()
-    # encrypt -> disk
     result = file_svc_upload("datasets", file.filename, data)
     return result
 
 
-@v1.get("/datasets/{filename}/preview", summary="Decrypt -> preview first N rows (CSV only)")
+@v1.get("/datasets/{filename}/preview", summary="Decrypt → preview first N rows (CSV only)")
 def v1_dataset_preview(filename: str, rows: int = 10):
     try:
-        data = file_svc_read("datasets", filename)   # disk → decrypt
+        data = file_svc_read("datasets", filename)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Dataset not found")
     except ValueError as e:
@@ -558,10 +551,10 @@ def v1_dataset_preview(filename: str, rows: int = 10):
     return dataset_svc_preview(data, filename, rows)
 
 
-@v1.get("/datasets/{filename}/download", summary="Decrypt -> streaming download")
+@v1.get("/datasets/{filename}/download", summary="Decrypt → streaming download")
 def v1_dataset_download(filename: str):
     try:
-        data = file_svc_read("datasets", filename)   # disk → decrypt → full bytes in memory
+        data = file_svc_read("datasets", filename)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Dataset not found")
     except ValueError as e:
@@ -587,10 +580,8 @@ def v1_delete_dataset(filename: str):
         raise HTTPException(status_code=404, detail="Dataset not found")
 
 
-# General / Video
-@v1.post("/general/upload", summary="Upload file; videos -> H.264 compress -> encrypt -> store")
+@v1.post("/general/upload", summary="Upload file; videos → H.264 compress → encrypt → store")
 async def v1_upload_general(file: UploadFile = File(...)):
-    
     data     = await file.read()
     filename = file.filename
 
@@ -601,7 +592,7 @@ async def v1_upload_general(file: UploadFile = File(...)):
         tmp_out  = STORAGE / "general" / f"_tmp_out_{out_name}"
 
         try:
-            tmp_in.write_bytes(data)                           # raw write (temp only)
+            tmp_in.write_bytes(data)
             stats = general_svc_compress_video(tmp_in, tmp_out)
             compressed_data = tmp_out.read_bytes()
         except RuntimeError as e:
@@ -610,7 +601,6 @@ async def v1_upload_general(file: UploadFile = File(...)):
             tmp_in.unlink(missing_ok=True)
             tmp_out.unlink(missing_ok=True)
 
-        # encrypt the compressed video -> disk
         result = file_svc_upload("general", out_name, compressed_data)
         result.update(stats)
         result["compressed"] = True
@@ -624,7 +614,7 @@ async def v1_upload_general(file: UploadFile = File(...)):
 @v1.get("/general/{filename}", summary="Decrypt → stream video / download file")
 def v1_get_general(filename: str):
     try:
-        data = file_svc_read("general", filename)   # disk → decrypt → bytes
+        data = file_svc_read("general", filename)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
     except ValueError as e:
@@ -652,11 +642,9 @@ def v1_delete_general(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
 
 
-#Status
 @v1.get("/status", summary="Disk usage per category + total disk stats")
 def v1_status():
     return status_svc_disk_usage()
-
 
 
 app.include_router(v1)

@@ -1,75 +1,133 @@
 {% extends "base.html" %}
+{% block title %}{{ category|capitalize }} — Private Cloud{% endblock %}
 
 {% block content %}
-<div>
-    <a href="/home" 
-       hx-get="/home" 
-       hx-target="body"
-       hx-swap="outerHTML"
-       hx-push-url="true"
-       class="inline-flex items-center gap-2 text-cyan-400 hover:text-cyan-300 mb-8">
-        ← Back to Home
-    </a>
+<div class="fade-up">
 
-    <div class="flex justify-between items-center mb-8">
-        <h1 class="text-4xl font-bold capitalize">{{ category }}</h1>
-        
-        <button onclick="document.getElementById('upload-form').classList.toggle('hidden')"
-                class="bg-cyan-600 hover:bg-cyan-500 px-6 py-3 rounded-2xl font-medium flex items-center gap-2">
-            ↑ Upload to {{ category|capitalize }}
+    <div class="mb-6 sm:mb-8">
+        <a href="/home"
+           hx-get="/home"
+           hx-target="body"
+           hx-swap="outerHTML"
+           hx-push-url="true"
+           class="btn-ghost text-xs sm:text-sm">← Home</a>
+    </div>
+
+    <div class="flex items-center justify-between gap-3 mb-6 sm:mb-8">
+        <div>
+            <h1 class="text-2xl sm:text-4xl font-extrabold capitalize tracking-tight">{{ category }}</h1>
+            <p class="text-zinc-500 text-xs sm:text-sm mt-1 mono">{{ files|length }} file{{ 's' if files|length != 1 else '' }}</p>
+        </div>
+
+        <button
+            onclick="document.getElementById('upload-form').classList.toggle('hidden')"
+            class="btn-primary flex items-center gap-1.5 shrink-0">
+            <span>↑</span>
+            <span class="hidden sm:inline">Upload</span>
         </button>
     </div>
 
-    <!-- Upload Form -->
-    <div id="upload-form" class="hidden bg-zinc-900 border border-zinc-700 rounded-3xl p-6 mb-10">
-        <form hx-post="/upload/{{ category }}" 
-              hx-encoding="multipart/form-data"
-              hx-target="#file-list"
-              hx-swap="beforeend"
-              class="flex gap-4">
-            <input type="file" name="file" 
-                   {% if category == "notes" %}accept=".txt,.md,.json"{% elif category == "images" %}accept="image/*"{% endif %}
-                   class="flex-1 bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4">
-            <button type="submit" 
-                    class="bg-emerald-600 hover:bg-emerald-500 px-8 py-4 rounded-2xl font-medium">
+    <div id="upload-form" class="hidden card p-4 sm:p-6 mb-6 sm:mb-8">
+        <form
+            hx-post="/upload/{{ category }}"
+            hx-encoding="multipart/form-data"
+            hx-target="#file-list"
+            hx-swap="afterbegin"
+            hx-on::after-request="this.reset()"
+            class="flex flex-col sm:flex-row gap-3">
+
+            <input type="file" name="file"
+                {% if category == "notes" %}accept=".txt,.md,.json"
+                {% elif category == "images" %}accept="image/*"
+                {% endif %}>
+
+            <button type="submit"
+                    class="bg-emerald-700 hover:bg-emerald-600 text-white rounded-2xl px-6 py-3 font-semibold text-sm transition-colors shrink-0">
                 Upload
             </button>
         </form>
+
+        <p class="text-zinc-600 text-xs mt-3 mono">
+            {% if category == "images" %}Images are compressed to WebP and encrypted at rest.
+            {% elif category == "notes" %}Notes are encrypted at rest.
+            {% elif category == "datasets" %}CSV files support row preview. All data encrypted at rest.
+            {% elif category == "general" %}Videos are H.264-compressed then encrypted. Other files encrypted as-is.
+            {% endif %}
+        </p>
     </div>
 
-    <!-- Files Grid -->
     <div id="file-list" class="masonry">
         {% for file in files %}
-        <div class="masonry-item bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
+        <div class="masonry-item card overflow-hidden">
             {% if category == "images" %}
-            <img src="/download/{{ category }}/{{ file.name }}" 
-                 alt="{{ file.name }}" 
-                 class="w-full h-auto">
+            <div class="bg-zinc-900 flex items-center justify-center min-h-[120px]">
+                <img src="/api/v1/images/{{ file.name }}?format=webp"
+                     alt="{{ file.name }}"
+                     loading="lazy"
+                     class="w-full h-auto object-cover">
+            </div>
             {% else %}
-            <div class="p-6">
-                <p class="font-medium break-all">{{ file.name }}</p>
-                <p class="text-xs text-zinc-500 mt-2">{{ file.size_mb }} MB • {{ file.modified[:10] }}</p>
+            <div class="p-4 sm:p-5">
+                <div class="flex items-start gap-3">
+                    <span class="text-2xl">
+                        {% if category == "notes" %}📝
+                        {% elif category == "datasets" %}📊
+                        {% else %}📄
+                        {% endif %}
+                    </span>
+                    <div class="min-w-0">
+                        <p class="font-semibold text-sm break-all leading-snug">{{ file.name }}</p>
+                        <p class="mono text-zinc-500 text-xs mt-1">{{ file.size_mb }} MB · {{ file.modified[:10] }}</p>
+                    </div>
+                </div>
+                {% if category == "datasets" and file.name.endswith('.csv') %}
+                <a href="/api/v1/datasets/{{ file.name }}/preview"
+                   class="inline-block mt-3 tag text-cyan-500 hover:underline">Preview CSV</a>
+                {% endif %}
             </div>
             {% endif %}
 
-            <div class="border-t border-zinc-800 px-6 py-4 flex justify-between text-sm">
-                <a href="/download/{{ category }}/{{ file.name }}" 
-                   class="text-cyan-400 hover:underline">Download</a>
-                <button 
+            <div class="border-t border-zinc-800 px-4 py-3 flex justify-between items-center">
+                {% if category == "images" %}
+                <a href="/api/v1/images/{{ file.name }}"
+                   class="btn-ghost text-xs">↓ Download</a>
+                {% elif category == "notes" %}
+                <a href="/api/v1/notes/{{ file.name }}"
+                   class="btn-ghost text-xs">↓ Download</a>
+                {% elif category == "datasets" %}
+                <a href="/api/v1/datasets/{{ file.name }}/download"
+                   class="btn-ghost text-xs">↓ Download</a>
+                {% else %}
+                <a href="/api/v1/general/{{ file.name }}"
+                   class="btn-ghost text-xs">↓ Download</a>
+                {% endif %}
+
+                <button
                     hx-delete="/delete/{{ category }}/{{ file.name }}"
-                    hx-confirm="Delete this file?"
+                    hx-confirm="Delete {{ file.name }}?"
                     hx-target="closest .masonry-item"
                     hx-swap="delete"
-                    class="text-red-400 hover:text-red-500">Delete</button>
+                    class="text-red-500 hover:text-red-400 text-xs font-semibold transition-colors">
+                    Delete
+                </button>
             </div>
         </div>
         {% endfor %}
     </div>
 
     {% if files|length == 0 %}
-    <div class="text-center py-20 text-zinc-500">
-        No files in this category yet.<br>Upload something to get started!
+    <div class="text-center py-16 sm:py-24 text-zinc-600">
+        <div class="text-5xl mb-4">
+            {% if category == "images" %}🖼️
+            {% elif category == "notes" %}📝
+            {% elif category == "datasets" %}📊
+            {% else %}📁
+            {% endif %}
+        </div>
+        <p class="font-semibold text-zinc-500">No files yet</p>
+        <p class="text-sm mt-1">Upload something to get started</p>
     </div>
     {% endif %}
+
 </div>
 {% endblock %}

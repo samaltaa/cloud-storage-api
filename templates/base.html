@@ -3,37 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Private Cloud</title>
+    <title>{% block title %}Private Cloud{% endblock %}</title>
     <script src="https://unpkg.com/htmx.org@2.0.3/dist/htmx.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --accent: #22d3ee;
+            --accent-dim: #0e7490;
+            --surface: #111113;
+            --surface-2: #18181b;
+            --surface-3: #27272a;
+            --border: #3f3f46;
+            --text-muted: #71717a;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Syne', sans-serif;
+            background-color: var(--surface);
+            color: #f4f4f5;
+            min-height: 100svh;
+        }
+
+        .mono { font-family: 'DM Mono', monospace; }
+
         .masonry {
             column-count: 1;
-            column-gap: 1.5rem;
+            column-gap: 1rem;
         }
-        @media (min-width: 640px) { .masonry { column-count: 2; } }
-        @media (min-width: 1024px) { .masonry { column-count: 3; } }
+        @media (min-width: 480px)  { .masonry { column-count: 2; } }
+        @media (min-width: 768px)  { .masonry { column-count: 3; } }
         @media (min-width: 1280px) { .masonry { column-count: 4; } }
-        .masonry-item { break-inside: avoid; margin-bottom: 1.5rem; }
+        .masonry-item { break-inside: avoid; margin-bottom: 1rem; }
+
+        .nav-link {
+            color: var(--text-muted);
+            transition: color 0.15s;
+            font-size: 0.875rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .nav-link:hover, .nav-link.active { color: var(--accent); }
+
+        .card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 1.25rem;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+        .card:hover { border-color: var(--accent); }
+
+        .btn-primary {
+            background: var(--accent-dim);
+            color: #fff;
+            border-radius: 0.875rem;
+            padding: 0.625rem 1.25rem;
+            font-weight: 600;
+            font-size: 0.875rem;
+            transition: background 0.15s;
+            white-space: nowrap;
+        }
+        .btn-primary:hover { background: var(--accent); color: #000; }
+
+        .btn-ghost {
+            color: var(--accent);
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: opacity 0.15s;
+        }
+        .btn-ghost:hover { opacity: 0.7; }
+
+        .tag {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.7rem;
+            background: var(--surface-3);
+            color: var(--text-muted);
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.4rem;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .fade-up { animation: fadeUp 0.3s ease both; }
+
+        input[type="file"] {
+            background: var(--surface-3);
+            border: 1px solid var(--border);
+            border-radius: 0.875rem;
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            width: 100%;
+            color: #f4f4f5;
+        }
+
+        .htmx-indicator { opacity: 0; transition: opacity 0.2s; }
+        .htmx-request .htmx-indicator { opacity: 1; }
     </style>
 </head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen">
-    <nav class="bg-zinc-900 border-b border-zinc-700 py-4 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-6 flex items-center justify-between">
-            <h1 class="text-2xl font-bold flex items-center gap-2">
-                ☁️ Private Cloud
-            </h1>
-            <a href="/home" 
-               hx-get="/" 
-               hx-target="body" 
+<body>
+
+<nav class="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+        <a href="/home"
+           hx-get="/home"
+           hx-target="body"
+           hx-swap="outerHTML"
+           hx-push-url="true"
+           class="text-lg font-extrabold tracking-tight flex items-center gap-2 shrink-0">
+            ☁️ <span class="hidden sm:inline">Private Cloud</span>
+        </a>
+
+        <div class="flex items-center gap-4 sm:gap-6">
+            <a href="/home"
+               hx-get="/home"
+               hx-target="body"
                hx-swap="outerHTML"
                hx-push-url="true"
-               class="hover:text-cyan-400 transition">Home</a>
-        </div>
-    </nav>
+               class="nav-link">Files</a>
 
-    <div class="max-w-7xl mx-auto px-6 py-8">
-        {% block content %}{% endblock %}
+            <a href="/dashboard"
+               hx-get="/dashboard"
+               hx-target="body"
+               hx-swap="outerHTML"
+               hx-push-url="true"
+               class="nav-link">Dashboard</a>
+        </div>
     </div>
+</nav>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+    {% block content %}{% endblock %}
+</main>
+
 </body>
 </html>

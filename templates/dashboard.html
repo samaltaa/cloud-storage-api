@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Private Cloud{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+
+    <div class="mb-6 sm:mb-10">
+        <h2 class="text-2xl sm:text-4xl font-extrabold tracking-tight">Dashboard</h2>
+        <p class="text-zinc-500 text-sm mt-1">Storage overview & health</p>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-10">
+        <div class="card p-4 sm:p-5 col-span-2 sm:col-span-1">
+            <p class="text-zinc-500 text-xs uppercase tracking-widest font-semibold mb-1">Total Files</p>
+            <p class="mono text-2xl sm:text-3xl font-bold text-cyan-400">{{ total_files }}</p>
+        </div>
+
+        <div class="card p-4 sm:p-5">
+            <p class="text-zinc-500 text-xs uppercase tracking-widest font-semibold mb-1">Disk Used</p>
+            <p class="mono text-xl sm:text-2xl font-bold text-emerald-400">{{ disk.disk_used_gb }} <span class="text-sm text-zinc-500">GB</span></p>
+        </div>
+
+        <div class="card p-4 sm:p-5">
+            <p class="text-zinc-500 text-xs uppercase tracking-widest font-semibold mb-1">Disk Free</p>
+            <p class="mono text-xl sm:text-2xl font-bold text-zinc-300">{{ disk.disk_free_gb }} <span class="text-sm text-zinc-500">GB</span></p>
+        </div>
+
+        <div class="card p-4 sm:p-5">
+            <p class="text-zinc-500 text-xs uppercase tracking-widest font-semibold mb-1">Used %</p>
+            <p class="mono text-xl sm:text-2xl font-bold {% if disk.disk_used_percent > 80 %}text-red-400{% elif disk.disk_used_percent > 60 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                {{ disk.disk_used_percent }}<span class="text-sm text-zinc-500">%</span>
+            </p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+
+        <div class="card p-5 sm:p-8 flex flex-col items-center justify-center">
+            <p class="text-zinc-400 text-xs uppercase tracking-widest font-semibold mb-4 sm:mb-6">Files by Category</p>
+            <div class="w-full max-w-[260px] sm:max-w-[300px] relative">
+                <canvas id="pieChart"></canvas>
+                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span class="mono text-2xl sm:text-3xl font-bold text-white">{{ total_files }}</span>
+                    <span class="text-zinc-500 text-xs mt-0.5">total</span>
+                </div>
+            </div>
+
+            <div id="chart-legend" class="flex flex-wrap justify-center gap-3 mt-5 sm:mt-6">
+                {% for cat in categories %}
+                <div class="flex items-center gap-1.5 text-xs">
+                    <span class="legend-dot w-2.5 h-2.5 rounded-full shrink-0" data-index="{{ loop.index0 }}"></span>
+                    <span class="capitalize text-zinc-400">{{ cat }}</span>
+                    <span class="mono text-zinc-500">({{ disk.storage_by_category[cat].file_count }})</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card p-5 sm:p-8 flex flex-col">
+            <p class="text-zinc-400 text-xs uppercase tracking-widest font-semibold mb-4 sm:mb-6">Storage by Category</p>
+
+            <div class="flex-1 space-y-4 sm:space-y-5">
+                {% set colors_text = ["text-cyan-400", "text-emerald-400", "text-amber-400", "text-violet-400"] %}
+                {% set colors_bar  = ["bg-cyan-500", "bg-emerald-500", "bg-amber-500", "bg-violet-500"] %}
+                {% for cat in categories %}
+                {% set cat_data = disk.storage_by_category[cat] %}
+                {% set pct = ((cat_data.size_mb / (disk.disk_used_gb * 1024)) * 100) | round(1) if disk.disk_used_gb > 0 else 0 %}
+                <div>
+                    <div class="flex justify-between items-baseline mb-1.5">
+                        <span class="capitalize font-semibold text-sm flex items-center gap-2">
+                            {% if cat == "images" %}🖼️{% elif cat == "notes" %}📝{% elif cat == "datasets" %}📊{% else %}📁{% endif %}
+                            {{ cat }}
+                        </span>
+                        <span class="mono text-xs {{ colors_text[loop.index0 % 4] }}">
+                            {{ cat_data.size_mb }} MB · {{ cat_data.file_count }} file{{ 's' if cat_data.file_count != 1 else '' }}
+                        </span>
+                    </div>
+                    <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                        <div class="{{ colors_bar[loop.index0 % 4] }} h-full rounded-full transition-all storage-bar"
+                             data-pct="{{ [pct, 100] | min }}"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="mt-6 pt-5 border-t border-zinc-800 grid grid-cols-2 gap-3">
+                <div>
+                    <p class="text-zinc-500 text-xs">Total Capacity</p>
+                    <p class="mono font-bold text-sm mt-0.5">{{ disk.disk_total_gb }} GB</p>
+                </div>
+                <div>
+                    <p class="text-zinc-500 text-xs">All Categories</p>
+                    <p class="mono font-bold text-sm mt-0.5">{{ disk.disk_used_gb }} GB used</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {% set colors_card = ["border-cyan-900 hover:border-cyan-500", "border-emerald-900 hover:border-emerald-500", "border-amber-900 hover:border-amber-500", "border-violet-900 hover:border-violet-500"] %}
+        {% for cat in categories %}
+        {% set cat_data = disk.storage_by_category[cat] %}
+        <a href="/category/{{ cat }}"
+           hx-get="/category/{{ cat }}"
+           hx-target="body"
+           hx-swap="outerHTML"
+           hx-push-url="true"
+           class="card {{ colors_card[loop.index0 % 4] }} p-4 sm:p-5 block transition-all hover:scale-[1.02] active:scale-95 touch-manipulation">
+            <div class="text-2xl mb-2">
+                {% if cat == "images" %}🖼️{% elif cat == "notes" %}📝{% elif cat == "datasets" %}📊{% else %}📁{% endif %}
+            </div>
+            <p class="font-bold capitalize text-sm">{{ cat }}</p>
+            <p class="mono text-zinc-500 text-xs mt-1">{{ cat_data.file_count }} file{{ 's' if cat_data.file_count != 1 else '' }}</p>
+            <p class="mono text-zinc-600 text-xs">{{ cat_data.size_mb }} MB</p>
+        </a>
+        {% endfor %}
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script id="chart-data"
+    data-counts="{{ chart_counts_json }}"
+    data-labels="{{ chart_labels_json }}">
+</script>
+<script>
+(function () {
+    const el     = document.getElementById("chart-data");
+    const counts = JSON.parse(el.dataset.counts);
+    const labels = JSON.parse(el.dataset.labels);
+    const colors = ["#22d3ee", "#34d399", "#f59e0b", "#a78bfa"];
+
+    const ctx = document.getElementById("pieChart").getContext("2d");
+    new Chart(ctx, {
+        type: "doughnut",
+        data: {
+            labels: labels,
+            datasets: [{
+                data: counts.every(v => v === 0) ? [1, 1, 1, 1] : counts,
+                backgroundColor: colors.map(c => c + "cc"),
+                borderColor: colors,
+                borderWidth: 2,
+                hoverOffset: 8,
+            }],
+        },
+        options: {
+            cutout: "68%",
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.label}: ${counts.every(v => v === 0) ? 0 : ctx.raw} file${ctx.raw !== 1 ? 's' : ''}`,
+                    },
+                    backgroundColor: "#18181b",
+                    borderColor: "#3f3f46",
+                    borderWidth: 1,
+                    titleColor: "#f4f4f5",
+                    bodyColor: "#a1a1aa",
+                    padding: 10,
+                    cornerRadius: 10,
+                },
+            },
+            animation: { animateRotate: true, duration: 700 },
+        },
+    });
+
+    document.querySelectorAll(".legend-dot").forEach(function(dot) {
+        dot.style.background = colors[parseInt(dot.dataset.index, 10) % colors.length];
+    });
+
+    document.querySelectorAll(".storage-bar").forEach(function(bar) {
+        bar.style.width = bar.dataset.pct + "%";
+    });
+})();
+</script>
+{% endblock %}
