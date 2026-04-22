@@ -13,10 +13,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v3
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Verify Tailscale Connectivity
+        run: |
+          tailscale status
+          ping -c 2 ${{ secrets.SSH_HOST }}
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -25,25 +33,30 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          timeout: 60s
           script: |
             set -e
 
             cd ${{ secrets.APP_DIR }}
 
-            # Get latest code
+            echo "Pulling latest code..."
             git fetch --all
             git reset --hard origin/main
 
-            # Activate venv and install deps
+            echo "Activating virtualenv..."
             source venv/bin/activate
+
+            echo "Installing dependencies..."
             pip install -r requirements.txt --quiet
 
-            # Reload service definitions if changed
+            echo "Reloading systemd..."
             sudo systemctl daemon-reload
 
-            # Restart FastAPI service
+            echo "Restarting service..."
             sudo systemctl restart ${{ secrets.SYSTEMD_SERVICE }}
 
-            # Verify service status
+            echo "Checking service..."
             sudo systemctl is-active ${{ secrets.SYSTEMD_SERVICE }}
-            sudo systemctl status ${{ secrets.SYSTEMD_SERVICE }} --no-pager
+
+            echo "Recent logs:"
+            sudo journalctl -u ${{ secrets.SYSTEMD_SERVICE }} -n 20 --no-pager
