@@ -14,17 +14,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Tailscale
-        run: |
-          curl -fsSL https://tailscale.com/install.sh | sh
+        run: curl -fsSL https://tailscale.com/install.sh | sh
 
       - name: Connect to Tailscale
-        run: |
-          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTHKEY }}
+        run: sudo tailscale up --authkey="${{ secrets.TAILSCALE_AUTHKEY }}"
 
       - name: Verify Tailscale Connectivity
-        run: |
-          tailscale status
-          ping -c 2 ${{ secrets.SSH_HOST }}
+        run: ping -c 2 ${{ secrets.SSH_HOST }}
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -39,26 +35,14 @@ jobs:
 
             cd ${{ secrets.APP_DIR }}
 
-            echo "Pulling latest code..."
             git fetch --all
             git reset --hard origin/main
 
-            echo "Activating virtualenv..."
             source venv/bin/activate
-
-            echo "Installing dependencies..."
             pip install -r requirements.txt --quiet
 
-            echo "Reloading systemd..."
-            sudo systemctl daemon-reload
+            sudo /usr/bin/systemctl daemon-reload
+            sudo /usr/bin/systemctl restart ${{ secrets.SYSTEMD_SERVICE }}
+            sudo /usr/bin/systemctl is-active ${{ secrets.SYSTEMD_SERVICE }}
 
-            echo "Restarting service..."
-            sudo systemctl restart ${{ secrets.SYSTEMD_SERVICE }}
-
-            echo "Checking service..."
-            sudo systemctl is-active ${{ secrets.SYSTEMD_SERVICE }}
-
-            echo "Recent logs:"
-            sudo journalctl -u ${{ secrets.SYSTEMD_SERVICE }} -n 20 --no-pager
-
-            
+            sudo /usr/bin/journalctl -u ${{ secrets.SYSTEMD_SERVICE }} -n 20 --no-pager
